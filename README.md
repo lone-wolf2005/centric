@@ -85,8 +85,7 @@ centric/
 ├── components/
 ├── lib/
 ├── ai-service/          # YOLO FastAPI
-├── api/                 # NestJS + Prisma (active backend)
-└── backend/             # Legacy Laravel (not used)
+└── api/                 # NestJS + Prisma backend
 ```
 
 ## Seed data

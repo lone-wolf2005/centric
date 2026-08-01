@@ -34,12 +34,6 @@ yarn-error.log*
 .env*
 !.env.example
 
-# laravel (legacy)
-/backend/vendor
-/backend/node_modules
-/backend/storage/*.key
-/backend/.phpunit.result.cache
-
 # nest api
 /api/node_modules
 /api/dist
