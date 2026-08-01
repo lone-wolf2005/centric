@@ -9,8 +9,15 @@ from PIL import Image, ImageOps
 from ultralytics import YOLO
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_MODEL = (
-    r"C:\Users\ajith\OneDrive\Desktop\projects\dataset\runs\segment\train\weights\best.pt"
+# Prefer weights shipped under this repo: centric/dataset/.../best.pt
+DEFAULT_MODEL = str(
+    BASE_DIR.parent
+    / "dataset"
+    / "runs"
+    / "segment"
+    / "train"
+    / "weights"
+    / "best.pt"
 )
 MODEL_PATH = os.getenv("YOLO_MODEL_PATH", DEFAULT_MODEL)
 CONFIDENCE_THRESHOLD = float(os.getenv("YOLO_CONFIDENCE", "0.35"))
@@ -34,9 +41,13 @@ model: YOLO | None = None
 def get_model() -> YOLO:
     global model
     if model is None:
-        if not Path(MODEL_PATH).exists():
-            raise FileNotFoundError(f"Model not found at {MODEL_PATH}")
-        model = YOLO(MODEL_PATH)
+        path = Path(MODEL_PATH)
+        if not path.exists():
+            raise FileNotFoundError(
+                f"YOLO weights not found at {path}. "
+                "Set YOLO_MODEL_PATH or place best.pt under dataset/runs/segment/train/weights/."
+            )
+        model = YOLO(str(path))
     return model
 
 
@@ -89,12 +100,27 @@ async def detect(image: UploadFile = File(...)):
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Unsupported or corrupted image file") from exc
 
-    yolo_model = get_model()
-    results = yolo_model.predict(
-        source=pil_image,
-        conf=CONFIDENCE_THRESHOLD,
-        verbose=False,
-    )
+    try:
+        yolo_model = get_model()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load YOLO model: {exc}",
+        ) from exc
+
+    try:
+        results = yolo_model.predict(
+            source=pil_image,
+            conf=CONFIDENCE_THRESHOLD,
+            verbose=False,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"YOLO inference failed: {exc}",
+        ) from exc
 
     if not results:
         return {"detected": False, "message": "No inference result"}

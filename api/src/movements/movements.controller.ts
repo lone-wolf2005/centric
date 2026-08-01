@@ -286,12 +286,21 @@ export class MovementsController {
       });
       detection = res.data;
     } catch (err: unknown) {
-      const message =
-        axios.isAxiosError(err) && err.code === 'ECONNREFUSED'
-          ? 'AI detection service is not running on port 5001.'
-          : axios.isAxiosError(err)
-            ? (err.response?.data as { detail?: string })?.detail ?? err.message
-            : 'AI detection failed';
+      let message = 'AI detection failed';
+      if (axios.isAxiosError(err)) {
+        if (err.code === 'ECONNREFUSED') {
+          message = 'AI detection service is not running on port 5001.';
+        } else {
+          const detail = (err.response?.data as { detail?: string | string[] })
+            ?.detail;
+          message =
+            (typeof detail === 'string'
+              ? detail
+              : Array.isArray(detail)
+                ? detail.join('; ')
+                : undefined) ?? err.message;
+        }
+      }
       throw new ServiceUnavailableException(message);
     }
 
