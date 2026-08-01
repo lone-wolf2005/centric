@@ -1,36 +1,94 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Centric Material Tracking System
 
-## Getting Started
+AI-based centering and scaffolding rental management for RR Thulasi / RR Groups — built from the Mazenet proposal, FRD, and May 2026 rent statement Excel.
 
-First, run the development server:
+## Stack
+
+- **Frontend:** Next.js (App Router) + TypeScript + Tailwind CSS
+- **Backend:** NestJS + Prisma + SQLite (JWT auth)
+- **AI Service:** Python FastAPI + Ultralytics YOLO11 segmentation
+
+## YOLO model
+
+Uses trained weights from:
+
+`C:\Users\ajith\OneDrive\Desktop\projects\dataset\runs\segment\train\weights\best.pt`
+
+Override with env `YOLO_MODEL_PATH` if needed.
+
+## Features
+
+- Supervisor web app for inward/outward shifting with AI match/mismatch beeps
+- 11 material categories with real size rates from rent statement Excel
+- 33 project sites seeded from Excel + Erode Godown
+- Monthly billing (Excel formula: days × qty × rate/month ÷ 30)
+- Quotations, indents, site transfers, approvals, stock by location
+- Reports: inward/outward, item summary, AI accuracy, exceptions, utilization, rent statements
+- Tally sync stubs (Item master / DC / GRN / Invoice contracts)
+
+## Getting started
+
+### 1. NestJS API
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cd api
+npm install
+npx prisma db push
+npm run seed
+npm run start:dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+API: `http://localhost:3001/api`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+**Demo login:** `supervisor@centric.local` / `password`  
+Approver: `approver@centric.local` / `password`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Set in `api/.env`:
 
-## Learn More
+```
+DATABASE_URL="file:./dev.db"
+JWT_SECRET="centric-dev-secret-change-me"
+PORT=3001
+AI_SERVICE_URL="http://127.0.0.1:5001"
+```
 
-To learn more about Next.js, take a look at the following resources:
+### 2. AI service
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+cd ai-service
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn main:app --host 127.0.0.1 --port 5001
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 3. Frontend
 
-## Deploy on Vercel
+```bash
+npm install
+npm run dev
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+App: `http://localhost:3000`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`.env.local`:
+
+```
+NEXT_PUBLIC_API_URL=http://localhost:3001/api
+```
+
+## Project structure
+
+```
+centric/
+├── app/                 # Next.js pages
+├── components/
+├── lib/
+├── ai-service/          # YOLO FastAPI
+├── api/                 # NestJS + Prisma (active backend)
+└── backend/             # Legacy Laravel (not used)
+```
+
+## Seed data
+
+`api/prisma/data/excel_catalog.json` is generated from the Centering Rent Statement workbook (May 2026): sites, normalized sizes mapped to the 11 proposal categories, rates, and usage lines used to raise sample monthly bills.

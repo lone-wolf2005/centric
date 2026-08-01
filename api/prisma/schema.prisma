@@ -1,0 +1,365 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         String    @default("supervisor")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  quotations       Quotation[]        @relation("QuotationCreator")
+  indents          Indent[]           @relation("IndentCreator")
+  movements        MaterialMovement[] @relation("MovementSupervisor")
+  confirmedMoves   MaterialMovement[] @relation("MovementReceiver")
+  transfers        SiteTransfer[]     @relation("TransferCreator")
+  approvalsReq     Approval[]         @relation("ApprovalRequester")
+  approvalsAct     Approval[]         @relation("ApprovalApprover")
+  bills            RentalBill[]       @relation("BillGenerator")
+  notifications    AppNotification[]
+  tokens           AuthToken[]
+}
+
+model AuthToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Material {
+  id       Int      @id @default(autoincrement())
+  name     String   @unique
+  code     String   @unique
+  isActive Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sizes           MaterialSize[]
+  movementItems   MovementItem[]
+  scanSessions    ScanSession[]
+  scanEvents      ScanEvent[]
+  quotationItems  QuotationItem[]
+  indentItems     IndentItem[]
+  transferItems   SiteTransferItem[]
+  stockBalances   StockBalance[]
+  billLines       RentalBillLine[]
+}
+
+model MaterialSize {
+  id            Int      @id @default(autoincrement())
+  materialId    Int
+  material      Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  label         String
+  ratePerMonth  Float?
+  ratePerDay    Float?
+  unit          String   @default("Nos")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  movementItems  MovementItem[]
+  scanSessions   ScanSession[]
+  scanEvents     ScanEvent[]     @relation("ExpectedSize")
+  quotationItems QuotationItem[]
+  indentItems    IndentItem[]
+  transferItems  SiteTransferItem[]
+  stockBalances  StockBalance[]
+  billLines      RentalBillLine[]
+
+  @@unique([materialId, label])
+}
+
+model Location {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  type      String   @default("godown")
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sourceMoves MaterialMovement[] @relation("SourceLocation")
+  destMoves   MaterialMovement[] @relation("DestLocation")
+  fromTransfers SiteTransfer[] @relation("FromLocation")
+  toTransfers   SiteTransfer[] @relation("ToLocation")
+  stockBalances StockBalance[]
+  bills         RentalBill[]
+}
+
+model TallyOrder {
+  id           Int      @id @default(autoincrement())
+  orderNo      String   @unique
+  type         String   @default("rental")
+  customerName String?
+  siteName     String?
+  status       String   @default("open")
+  syncedAt     DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  movements MaterialMovement[]
+}
+
+model Quotation {
+  id               Int      @id @default(autoincrement())
+  quoteNo          String   @unique
+  revision         Int      @default(1)
+  customerName     String
+  siteName         String?
+  status           String   @default("draft")
+  estimatedAmount  Float?
+  validUntil       DateTime?
+  createdById      Int
+  createdBy        User     @relation("QuotationCreator", fields: [createdById], references: [id])
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  items     QuotationItem[]
+  movements MaterialMovement[]
+}
+
+model QuotationItem {
+  id            Int           @id @default(autoincrement())
+  quotationId   Int
+  quotation     Quotation     @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  materialId    Int
+  material      Material      @relation(fields: [materialId], references: [id])
+  materialSizeId Int?
+  materialSize  MaterialSize? @relation(fields: [materialSizeId], references: [id])
+  quantity      Int           @default(1)
+  ratePerMonth  Float?
+}
+
+model Indent {
+  id          Int      @id @default(autoincrement())
+  indentNo    String   @unique
+  projectName String
+  siteName    String?
+  status      String   @default("open")
+  createdById Int
+  createdBy   User     @relation("IndentCreator", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items     IndentItem[]
+  movements MaterialMovement[]
+}
+
+model IndentItem {
+  id             Int           @id @default(autoincrement())
+  indentId       Int
+  indent         Indent        @relation(fields: [indentId], references: [id], onDelete: Cascade)
+  materialId     Int
+  material       Material      @relation(fields: [materialId], references: [id])
+  materialSizeId Int?
+  materialSize   MaterialSize? @relation(fields: [materialSizeId], references: [id])
+  quantity       Int           @default(1)
+}
+
+model MaterialMovement {
+  id                     Int       @id @default(autoincrement())
+  type                   String
+  tallyOrderId           Int?
+  tallyOrder             TallyOrder? @relation(fields: [tallyOrderId], references: [id])
+  quotationId            Int?
+  quotation              Quotation? @relation(fields: [quotationId], references: [id])
+  indentId               Int?
+  indent                 Indent?    @relation(fields: [indentId], references: [id])
+  dcNumber               String?    @unique
+  grnNumber              String?    @unique
+  linkedDcNumber         String?
+  supervisorId           Int
+  supervisor             User       @relation("MovementSupervisor", fields: [supervisorId], references: [id])
+  destination            String?
+  sourceLocationId       Int?
+  sourceLocation         Location?  @relation("SourceLocation", fields: [sourceLocationId], references: [id])
+  destinationLocationId  Int?
+  destinationLocation    Location?  @relation("DestLocation", fields: [destinationLocationId], references: [id])
+  status                 String     @default("draft")
+  returnCondition        String?
+  approvalStatus         String     @default("pending")
+  receiverConfirmedById  Int?
+  receiver               User?      @relation("MovementReceiver", fields: [receiverConfirmedById], references: [id])
+  receiverConfirmedAt    DateTime?
+  notes                  String?
+  startedAt              DateTime?
+  completedAt            DateTime?
+  dueDate                DateTime?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+
+  items        MovementItem[]
+  scanSessions ScanSession[]
+}
+
+model MovementItem {
+  id                 Int           @id @default(autoincrement())
+  materialMovementId Int
+  movement           MaterialMovement @relation(fields: [materialMovementId], references: [id], onDelete: Cascade)
+  materialId         Int
+  material           Material      @relation(fields: [materialId], references: [id])
+  materialSizeId     Int?
+  materialSize       MaterialSize? @relation(fields: [materialSizeId], references: [id])
+  quantity           Int           @default(0)
+  scannedCount       Int           @default(0)
+}
+
+model ScanSession {
+  id                 Int           @id @default(autoincrement())
+  materialMovementId Int
+  movement           MaterialMovement @relation(fields: [materialMovementId], references: [id], onDelete: Cascade)
+  materialId         Int
+  material           Material      @relation(fields: [materialId], references: [id])
+  materialSizeId     Int?
+  materialSize       MaterialSize? @relation(fields: [materialSizeId], references: [id])
+  status             String        @default("active")
+  matchedCount       Int           @default(0)
+  mismatchCount      Int           @default(0)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  events ScanEvent[]
+}
+
+model ScanEvent {
+  id                  Int           @id @default(autoincrement())
+  scanSessionId       Int
+  session             ScanSession   @relation(fields: [scanSessionId], references: [id], onDelete: Cascade)
+  detectedMaterialId  Int
+  detectedMaterial    Material      @relation(fields: [detectedMaterialId], references: [id])
+  expectedSizeId      Int?
+  expectedSize        MaterialSize? @relation("ExpectedSize", fields: [expectedSizeId], references: [id])
+  isMatch             Boolean       @default(false)
+  sizeMismatch        Boolean       @default(false)
+  confidence          Float?
+  feedback            String        @default("match")
+  actionTaken         String?
+  manuallyVerified    Boolean       @default(false)
+  scannedAt           DateTime      @default(now())
+  createdAt           DateTime      @default(now())
+}
+
+model SiteTransfer {
+  id                 Int      @id @default(autoincrement())
+  transferNo         String   @unique
+  fromLocationId     Int
+  fromLocation       Location @relation("FromLocation", fields: [fromLocationId], references: [id])
+  toLocationId       Int
+  toLocation         Location @relation("ToLocation", fields: [toLocationId], references: [id])
+  status             String   @default("pending")
+  senderApproval     String   @default("pending")
+  receiverApproval   String   @default("pending")
+  authorityApproval  String   @default("pending")
+  createdById        Int
+  createdBy          User     @relation("TransferCreator", fields: [createdById], references: [id])
+  notes              String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  items SiteTransferItem[]
+}
+
+model SiteTransferItem {
+  id             Int           @id @default(autoincrement())
+  siteTransferId Int
+  transfer       SiteTransfer  @relation(fields: [siteTransferId], references: [id], onDelete: Cascade)
+  materialId     Int
+  material       Material      @relation(fields: [materialId], references: [id])
+  materialSizeId Int?
+  materialSize   MaterialSize? @relation(fields: [materialSizeId], references: [id])
+  quantity       Int           @default(1)
+}
+
+model Approval {
+  id             Int       @id @default(autoincrement())
+  approvableType String
+  approvableId   Int
+  type           String    @default("delivery")
+  status         String    @default("pending")
+  requestedById  Int
+  requester      User      @relation("ApprovalRequester", fields: [requestedById], references: [id])
+  approvedById   Int?
+  approver       User?     @relation("ApprovalApprover", fields: [approvedById], references: [id])
+  notes          String?
+  actedAt        DateTime?
+  createdAt      DateTime  @default(now())
+}
+
+model StockBalance {
+  id             Int           @id @default(autoincrement())
+  locationId     Int
+  location       Location      @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  materialId     Int
+  material       Material      @relation(fields: [materialId], references: [id])
+  materialSizeId Int?
+  materialSize   MaterialSize? @relation(fields: [materialSizeId], references: [id])
+  quantity       Int           @default(0)
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([locationId, materialId, materialSizeId])
+}
+
+model RentalBill {
+  id               Int       @id @default(autoincrement())
+  billNo           String    @unique
+  locationId       Int
+  location         Location  @relation(fields: [locationId], references: [id])
+  siteName         String
+  periodStart      DateTime
+  periodEnd        DateTime
+  centeringTotal   Float     @default(0)
+  scaffoldingTotal Float     @default(0)
+  grandTotal       Float     @default(0)
+  status           String    @default("draft")
+  generatedById    Int?
+  generatedBy      User?     @relation("BillGenerator", fields: [generatedById], references: [id])
+  raisedAt         DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  lines RentalBillLine[]
+
+  @@unique([locationId, periodStart, periodEnd])
+}
+
+model RentalBillLine {
+  id             Int           @id @default(autoincrement())
+  rentalBillId   Int
+  bill           RentalBill    @relation(fields: [rentalBillId], references: [id], onDelete: Cascade)
+  materialId     Int
+  material       Material      @relation(fields: [materialId], references: [id])
+  materialSizeId Int?
+  materialSize   MaterialSize? @relation(fields: [materialSizeId], references: [id])
+  particulars    String
+  categoryGroup  String        @default("centering")
+  unit           String        @default("Nos")
+  quantity       Int           @default(0)
+  startDate      DateTime
+  endDate        DateTime
+  days           Int           @default(0)
+  totalConsumed  Int           @default(0)
+  ratePerMonth   Float         @default(0)
+  ratePerDay     Float         @default(0)
+  amount         Float         @default(0)
+}
+
+model AppNotification {
+  id        Int       @id @default(autoincrement())
+  userId    Int?
+  user      User?     @relation(fields: [userId], references: [id])
+  type      String
+  title     String
+  body      String?
+  meta      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+}
