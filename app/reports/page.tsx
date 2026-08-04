@@ -26,6 +26,37 @@ type Utilization = {
   utilization_percent: number;
 };
 
+type MovementReportRow = {
+  id: number;
+  date: string;
+  supervisor?: string | null;
+  reference?: string | null;
+  destination?: string | null;
+  customer?: string | null;
+  site?: string | null;
+  items: Array<{
+    material?: string | null;
+    size?: string | null;
+    quantity: number;
+    scanned_count: number;
+  }>;
+};
+
+type ExceptionRow = {
+  id: number;
+  confidence?: number | null;
+  scannedAt?: string;
+  scanned_at?: string;
+  detectedMaterial?: { name?: string } | null;
+  detected_material?: { name?: string } | null;
+  session?: {
+    material?: { name?: string } | null;
+    materialSize?: { label?: string } | null;
+    material_size?: { label?: string } | null;
+    movement?: { supervisor?: { name?: string } | null } | null;
+  } | null;
+};
+
 type Tab =
   | "summary"
   | "inward"
@@ -42,9 +73,9 @@ export default function ReportsPage() {
   const [pendingReturns, setPendingReturns] = useState<unknown[]>([]);
   const [damageScrap, setDamageScrap] = useState<unknown[]>([]);
   const [billingPending, setBillingPending] = useState<unknown[]>([]);
-  const [inward, setInward] = useState<unknown[]>([]);
-  const [outward, setOutward] = useState<unknown[]>([]);
-  const [exceptions, setExceptions] = useState<unknown[]>([]);
+  const [inward, setInward] = useState<MovementReportRow[]>([]);
+  const [outward, setOutward] = useState<MovementReportRow[]>([]);
+  const [exceptions, setExceptions] = useState<ExceptionRow[]>([]);
   const [utilization, setUtilization] = useState<Utilization[]>([]);
   const [supervisors, setSupervisors] = useState<
     Array<{ id: number; supervisor_name: string; movement_count: number; items_handled: number }>
@@ -57,9 +88,9 @@ export default function ReportsPage() {
       apiFetch<unknown[]>("/reports/pending-returns", { token }),
       apiFetch<unknown[]>("/reports/damage-scrap", { token }),
       apiFetch<unknown[]>("/reports/billing-pending", { token }),
-      apiFetch<unknown[]>("/reports/inward", { token }),
-      apiFetch<unknown[]>("/reports/outward", { token }),
-      apiFetch<unknown[]>("/reports/exceptions", { token }),
+      apiFetch<MovementReportRow[]>("/reports/inward", { token }),
+      apiFetch<MovementReportRow[]>("/reports/outward", { token }),
+      apiFetch<ExceptionRow[]>("/reports/exceptions", { token }),
       apiFetch<Utilization[]>("/reports/asset-utilization", { token }),
       apiFetch<
         Array<{
@@ -169,7 +200,11 @@ export default function ReportsPage() {
                       <td className="px-3 py-2">{item.name}</td>
                       <td className="px-3 py-2">{item.total_inward}</td>
                       <td className="px-3 py-2">{item.total_outward}</td>
-                      <td className="px-3 py-2">{item.balance}</td>
+                      <td className="px-3 py-2">
+                        {item.balance < 0
+                          ? `Outward ${Math.abs(item.balance)}`
+                          : item.balance}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -188,9 +223,13 @@ export default function ReportsPage() {
           </section>
         )}
 
-        {tab === "inward" && <JsonTable title="Material Inward" rows={inward} />}
-        {tab === "outward" && <JsonTable title="Material Outward" rows={outward} />}
-        {tab === "exceptions" && <JsonTable title="AI Exceptions" rows={exceptions} />}
+        {tab === "inward" && (
+          <MovementReportTable title="Material Inward" rows={inward} refLabel="GRN" />
+        )}
+        {tab === "outward" && (
+          <MovementReportTable title="Material Outward" rows={outward} refLabel="DC" />
+        )}
+        {tab === "exceptions" && <ExceptionTable rows={exceptions} />}
 
         {tab === "utilization" && (
           <section className="rounded-2xl border bg-white p-6">
@@ -246,14 +285,130 @@ export default function ReportsPage() {
   );
 }
 
-function JsonTable({ title, rows }: { title: string; rows: unknown[] }) {
+function MovementReportTable({
+  title,
+  rows,
+  refLabel,
+}: {
+  title: string;
+  rows: MovementReportRow[];
+  refLabel: string;
+}) {
   return (
     <section className="rounded-2xl border bg-white p-6">
       <h3 className="font-semibold">{title}</h3>
       <p className="mt-2 text-sm text-slate-500">{rows.length} records</p>
-      <pre className="mt-4 max-h-96 overflow-auto rounded-xl bg-slate-50 p-4 text-xs">
-        {JSON.stringify(rows.slice(0, 20), null, 2)}
-      </pre>
+      <div className="mt-4 overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="text-slate-500">
+            <tr>
+              <th className="px-3 py-2">Date</th>
+              <th className="px-3 py-2">{refLabel}</th>
+              <th className="px-3 py-2">Supervisor</th>
+              <th className="px-3 py-2">Site / Destination</th>
+              <th className="px-3 py-2">Customer</th>
+              <th className="px-3 py-2">Items</th>
+              <th className="px-3 py-2">Scanned</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const qty = row.items.reduce((s, i) => s + (i.quantity || 0), 0);
+              const scanned = row.items.reduce((s, i) => s + (i.scanned_count || 0), 0);
+              const place = row.site || row.destination || "—";
+              return (
+                <tr key={row.id} className="border-t align-top">
+                  <td className="px-3 py-2 whitespace-nowrap">{row.date}</td>
+                  <td className="px-3 py-2">{row.reference || "—"}</td>
+                  <td className="px-3 py-2">{row.supervisor || "—"}</td>
+                  <td className="px-3 py-2">{place}</td>
+                  <td className="px-3 py-2">{row.customer || "—"}</td>
+                  <td className="px-3 py-2">
+                    <ul className="space-y-1">
+                      {row.items.map((item, idx) => (
+                        <li key={`${row.id}-${idx}`}>
+                          {item.material || "Material"}
+                          {item.size ? ` · ${item.size}` : ""}{" "}
+                          <span className="text-slate-500">
+                            ({item.scanned_count}/{item.quantity})
+                          </span>
+                        </li>
+                      ))}
+                      {!row.items.length ? <li className="text-slate-400">No line items</li> : null}
+                    </ul>
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {scanned}/{qty}
+                  </td>
+                </tr>
+              );
+            })}
+            {!rows.length ? (
+              <tr>
+                <td className="px-3 py-6 text-slate-500" colSpan={7}>
+                  No records yet.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function ExceptionTable({ rows }: { rows: ExceptionRow[] }) {
+  return (
+    <section className="rounded-2xl border bg-white p-6">
+      <h3 className="font-semibold">AI Exceptions</h3>
+      <p className="mt-2 text-sm text-slate-500">{rows.length} mismatches</p>
+      <div className="mt-4 overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="text-slate-500">
+            <tr>
+              <th className="px-3 py-2">When</th>
+              <th className="px-3 py-2">Expected</th>
+              <th className="px-3 py-2">Detected</th>
+              <th className="px-3 py-2">Confidence</th>
+              <th className="px-3 py-2">Supervisor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const when = row.scanned_at || row.scannedAt;
+              const expected = row.session?.material?.name;
+              const size =
+                row.session?.material_size?.label || row.session?.materialSize?.label;
+              const detected =
+                row.detected_material?.name || row.detectedMaterial?.name || "—";
+              const supervisor = row.session?.movement?.supervisor?.name || "—";
+              return (
+                <tr key={row.id} className="border-t">
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    {when ? new Date(when).toLocaleString() : "—"}
+                  </td>
+                  <td className="px-3 py-2">
+                    {expected || "—"}
+                    {size ? ` · ${size}` : ""}
+                  </td>
+                  <td className="px-3 py-2">{detected}</td>
+                  <td className="px-3 py-2">
+                    {row.confidence != null ? `${Math.round(Number(row.confidence))}%` : "—"}
+                  </td>
+                  <td className="px-3 py-2">{supervisor}</td>
+                </tr>
+              );
+            })}
+            {!rows.length ? (
+              <tr>
+                <td className="px-3 py-6 text-slate-500" colSpan={5}>
+                  No AI exceptions.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
