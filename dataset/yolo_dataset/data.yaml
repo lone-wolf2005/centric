@@ -1,0 +1,23 @@
+path: C:/Users/ajith/OneDrive/Desktop/projects/dataset/yolo_dataset
+train: images/train
+val: images/val
+nc: 18
+names:
+  0: adjust
+  1: aluminium
+  2: Angle_Shutter_Frame
+  3: Base_Plate
+  4: Bracing_Pipe
+  5: C_ledger_all
+  6: C_vertical_all
+  7: Gribs
+  8: H_Pipe_All
+  9: Lift_side_pipe
+  10: MS_Channel
+  11: Nandu_Clamp
+  12: Platform_Grill
+  13: Props
+  14: Screw_Jacky
+  15: Sheet
+  16: Span
+  17: V_Ledger
